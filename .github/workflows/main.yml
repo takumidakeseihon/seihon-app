@@ -23,5 +23,5 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           # Hugging FaceのSpaceリポジトリをリモートとして追加し、強制的にpushする
-          git remote add space https://takumidakeseihon:$HF_TOKEN@huggingface.co/spaces/takumidakeseihon/seihon-app
+          git remote add space https://takumidake:$HF_TOKEN@huggingface.co/spaces/takumidake/seihon-app
           git push --force space main
