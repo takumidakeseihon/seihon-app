@@ -9,19 +9,19 @@ jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
     steps:
-      # まず、GitHubリポジトリのコードをチェックアウト（コピー）します
+      # まず、GitHubリポジトリのコードをチェックアウトします
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          lfs: true # LFSファイルも取得する場合
 
-      # 次に、Hugging Face Hubにファイルをアップロード（同期）します
+      # 次に、Hugging Face Hubにファイルを強制的にpush（同期）します
       - name: Push to Hugging Face Hub
-        uses: huggingface/hub-auto-upload@v1
-        with:
-          # あなたのHugging Faceユーザー名とSpace名
-          repo_id: "takumidakesehon/seihon-app"
-          # これはSpaceであることを指定
-          repo_type: space
+        env:
           # GitHubのSecretsに登録したHF_TOKENを使用
-          hf_token: ${{ secrets.HF_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # Hugging FaceのSpaceリポジトリをリモートとして追加し、強制的にpushする
+          git remote add space https://takumidakeseihon:$HF_TOKEN@huggingface.co/spaces/takumidakeseihon/seihon-app
+          git push --force space main
