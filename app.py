@@ -4,32 +4,45 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, time
 import pandas as pd
 import json
+from pathlib import Path
 
 # --- 定数設定 ---
 CREDENTIAL_FILE = "nice-virtue-467105-v3-8aa4dd80c645.json" 
 SHEET_ID = "1D4j2Jyx4tigJ2OipiGNUAQ8hTZPYG8QbKOVCXy_E5Po"
 IN_PROGRESS_SHEET_NAME = "作業中"
 COMPLETED_SHEET_NAME = "完了記録"
+SCHEDULE_FILE = "schedule.csv" # 生産計画ファイル名
 PROCESS_OPTIONS = ["", "断裁", "折", "中綴じ", "無線綴じ", "ミシン・スジ", "綴じ（カレンダー）", "丁合（カレンダー）", "梱包", "区分け"]
 FOLD_OPTIONS = ["", "4p", "6p", "8p", "16p", "その他"]
 IN_PROGRESS_HEADER = ["記録ID", "製品名", "工程名", "詳細", "開始時間", "終了時間", "作業時間_分", "出来数", "作業人数", "ステータス"]
 
-# --- 認証とデータ操作関数 ---
+# --- データ読み込み・認証関数 ---
+@st.cache_data
+def load_schedule_data():
+    """生産計画ファイルを読み込む"""
+    try:
+        # Excelファイルの場合は pd.read_excel(SCHEDULE_FILE) に変更
+        df = pd.read_csv(SCHEDULE_FILE, encoding="utf-8-sig") # Shift_JISから変更
+        # '品名'という列名のデータをリストとして返す
+        return df['品名'].dropna().unique().tolist()
+    # ... (以下略) ...    except FileNotFoundError:
+        # ファイルがない場合は、警告を出さずに空のリストを返す
+        return []
+    except Exception as e:
+        st.error(f"❌ 生産計画ファイル({SCHEDULE_FILE})の読み込みに失敗: {e}")
+        return []
+
 @st.cache_resource
 def authorize_gspread():
     """Google Sheets APIへの認証を行い、クライアントオブジェクトを返す"""
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # Streamlit CloudのSecretsから認証情報を読み込む
+        # Streamlit Cloud/Hugging FaceのSecretsから認証情報を読み込む
         creds_dict = {
-            "type": st.secrets["type"],
-            "project_id": st.secrets["project_id"],
-            "private_key_id": st.secrets["private_key_id"],
-            "private_key": st.secrets["private_key"],
-            "client_email": st.secrets["client_email"],
-            "client_id": st.secrets["client_id"],
-            "auth_uri": st.secrets["auth_uri"],
-            "token_uri": st.secrets["token_uri"],
+            "type": st.secrets["type"], "project_id": st.secrets["project_id"],
+            "private_key_id": st.secrets["private_key_id"], "private_key": st.secrets["private_key"],
+            "client_email": st.secrets["client_email"], "client_id": st.secrets["client_id"],
+            "auth_uri": st.secrets["auth_uri"], "token_uri": st.secrets["token_uri"],
             "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
             "client_x509_cert_url": st.secrets["client_x509_cert_url"],
             "universe_domain": st.secrets["universe_domain"]
@@ -39,7 +52,9 @@ def authorize_gspread():
     except (KeyError, FileNotFoundError):
         # Secretsがない場合（ローカルでの実行時）は、ファイルから読み込む
         try:
-            credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIAL_FILE, scope)
+            script_dir = Path(__file__).parent
+            credential_path = script_dir / CREDENTIAL_FILE
+            credentials = ServiceAccountCredentials.from_json_keyfile_name(credential_path, scope)
             return gspread.authorize(credentials)
         except Exception as e:
             st.error(f"❌ ローカルでのGoogle認証に失敗: {e}")
@@ -58,7 +73,7 @@ def load_in_progress_data(sheet):
 
 # --- Streamlit UIの初期設定 ---
 st.set_page_config(layout="wide")
-st.title("📘 製本作業記録アプリ Final")
+st.title("📘 製本作業記録アプリ")
 
 if 'view' not in st.session_state:
     st.session_state.view = 'SELECT_PROCESS'
@@ -82,18 +97,28 @@ if st.session_state.view == 'SELECT_PROCESS':
 
     with col_form:
         st.header("Step 1: 製品と工程を選択")
-        in_progress_products = [""] 
+
+        # 生産計画と作業中リストから製品名を取得
+        schedule_products = load_schedule_data()
+        in_progress_products = [] 
         if not in_progress_df.empty:
-            in_progress_products.extend(sorted(in_progress_df['製品名'].unique()))
+            in_progress_products = sorted(in_progress_df['製品名'].unique())
         
-        product_choice_options = ["（新規登録）"] + in_progress_products
+        # 重複をなくし、ソートしたリストを作成
+        all_products = sorted(list(set(schedule_products + in_progress_products)))
+        
+        # 選択肢のリストを作成
+        product_choice_options = [""] + all_products + ["（リストにない製品を手入力）"]
+        
         selected_choice = st.selectbox("作業対象の製品を選択", product_choice_options, key="product_choice")
         
         product_name = ""
-        if selected_choice == "（新規登録）":
+        # 「リストにない製品...」が選ばれた場合のみ、手入力用のテキストボックスを表示
+        if selected_choice == "（リストにない製品を手入力）":
             product_name = st.text_input("新しい製品名を入力", key="new_product_name_input")
         else:
             product_name = selected_choice
+
         process_name = st.selectbox("記録する工程名", PROCESS_OPTIONS, key="process_name_input")
 
         if st.button("この工程の入力を開始する", type="primary", disabled=(not product_name or not process_name)):
@@ -143,11 +168,9 @@ elif st.session_state.view == 'INPUT_FORM':
             detail_value = f"{work_time_minutes}分"
         elif st.session_state.selected_process == "折":
             detail_value = st.selectbox("ページ数", FOLD_OPTIONS)
-            # ▼▼▼ 変更点 ▼▼▼
             start_time_obj = st.time_input("開始時間", step=600)
             end_time_obj = st.time_input("終了時間", step=600)
         else:
-            # ▼▼▼ 変更点 ▼▼▼
             start_time_obj = st.time_input("開始時間", step=600)
             end_time_obj = st.time_input("終了時間", step=600)
         
