@@ -21,6 +21,5 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git remote add hf https://takumidake
-:${HF_TOKEN}@huggingface.co/spaces/takumidake/SeihonApp
+          git remote add hf https://takumidake:${HF_TOKEN}@huggingface.co/spaces/takumidake/SeihonApp
           git push hf main --force
