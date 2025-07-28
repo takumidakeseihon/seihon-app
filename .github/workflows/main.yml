@@ -1,25 +1,27 @@
-name: Sync to Hugging Face
+name: Sync to Hugging Face Hub
 
 on:
   push:
-    branches: [main]  # GitHubのmainブランチに変更があったときに動作
+    branches:
+      - main  # mainブランチにpushされた時だけ実行
 
 jobs:
-  deploy:
+  sync-to-hub:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      # まず、GitHubリポジトリのコードをチェックアウト（コピー）します
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Git identity
-        run: |
-          git config --global user.email "you@example.com"
-          git config --global user.name "Your Name"
-
-      - name: Push to Hugging Face
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          git remote add hf https://takumidakeseihon:${HF_TOKEN}@huggingface.co/spaces/takumidakeseihon/seihon-app main
-          git push hf main --force
+      # 次に、Hugging Face Hubにファイルをアップロード（同期）します
+      - name: Push to Hugging Face Hub
+        uses: huggingface/hub-auto-upload@v1
+        with:
+          # あなたのHugging Faceユーザー名とSpace名
+          repo_id: "takumidakesehon/seihon-app"
+          # これはSpaceであることを指定
+          repo_type: space
+          # GitHubのSecretsに登録したHF_TOKENを使用
+          hf_token: ${{ secrets.HF_TOKEN }}
