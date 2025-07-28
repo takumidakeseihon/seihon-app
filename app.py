@@ -6,7 +6,7 @@ import pandas as pd
 import json
 
 # --- 定数設定 ---
-CREDENTIAL_FILE = "nice-virtue-467105-v3-8aa4dd80c645.json"  
+CREDENTIAL_FILE = "nice-virtue-467105-v3-8aa4dd80c645.json" 
 SHEET_ID = "1D4j2Jyx4tigJ2OipiGNUAQ8hTZPYG8QbKOVCXy_E5Po"
 IN_PROGRESS_SHEET_NAME = "作業中"
 COMPLETED_SHEET_NAME = "完了記録"
@@ -20,7 +20,7 @@ def authorize_gspread():
     """Google Sheets APIへの認証を行い、クライアントオブジェクトを返す"""
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # ▼▼▼ 変更点：新しいSecretsの形式に合わせて認証情報を組み立てる ▼▼▼
+        # Streamlit CloudのSecretsから認証情報を読み込む
         creds_dict = {
             "type": st.secrets["type"],
             "project_id": st.secrets["project_id"],
@@ -85,6 +85,7 @@ if st.session_state.view == 'SELECT_PROCESS':
         in_progress_products = [""] 
         if not in_progress_df.empty:
             in_progress_products.extend(sorted(in_progress_df['製品名'].unique()))
+        
         product_choice_options = ["（新規登録）"] + in_progress_products
         selected_choice = st.selectbox("作業対象の製品を選択", product_choice_options, key="product_choice")
         
@@ -135,17 +136,20 @@ elif st.session_state.view == 'INPUT_FORM':
         workers = st.number_input("作業人数", min_value=1, step=1)
         
         detail_value, start_time_obj, end_time_obj, work_time_minutes = "", None, None, 0
+
         if st.session_state.selected_process == "断裁":
             time_options = [f"{i*10}" for i in range(1, 12 * 6 + 1)] 
             work_time_minutes = st.selectbox("作業時間（分）", time_options)
             detail_value = f"{work_time_minutes}分"
         elif st.session_state.selected_process == "折":
             detail_value = st.selectbox("ページ数", FOLD_OPTIONS)
-            start_time_obj = st.time_input("開始時間")
-            end_time_obj = st.time_input("終了時間")
+            # ▼▼▼ 変更点 ▼▼▼
+            start_time_obj = st.time_input("開始時間", step=600)
+            end_time_obj = st.time_input("終了時間", step=600)
         else:
-            start_time_obj = st.time_input("開始時間")
-            end_time_obj = st.time_input("終了時間")
+            # ▼▼▼ 変更点 ▼▼▼
+            start_time_obj = st.time_input("開始時間", step=600)
+            end_time_obj = st.time_input("終了時間", step=600)
         
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
@@ -157,6 +161,7 @@ elif st.session_state.view == 'INPUT_FORM':
             if start_time_obj and end_time_obj and end_time_obj <= start_time_obj:
                 st.error("❌ 終了時間は開始時間よりも後の時刻を選択してください。")
                 return
+
             status = "完了" if is_complete else "作業中"
             start_time_str = start_time_obj.strftime('%H:%M') if start_time_obj else ""
             end_time_str = end_time_obj.strftime('%H:%M') if end_time_obj else ""
@@ -187,6 +192,7 @@ elif st.session_state.view == 'INPUT_FORM':
             else:
                 in_progress_sheet.append_row(final_row_list, value_input_option='USER_ENTERED')
                 st.success(f"工程「{st.session_state.selected_process}」を追加しました。")
+            
             st.session_state.view = 'SELECT_PROCESS'
 
         if add_in_progress_button: run_process(is_complete=False)
