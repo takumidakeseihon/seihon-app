@@ -4,7 +4,7 @@ emoji: 📘
 colorFrom: blue
 colorTo: green
 sdk: streamlit
-app_file: streamlit_app.py
+app_file: app.py
 ---
 
 # 製本作業記録アプリ
